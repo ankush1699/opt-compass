@@ -1,0 +1,28 @@
+{"question": "How many days of unemployment am I allowed during post-completion OPT?", "must_contain": ["aggregate of more than 90 days of unemployment"], "in_regulation": true}
+{"question": "How many days of unemployment are allowed during the 24-month STEM OPT extension?", "must_contain": ["150 days"], "in_regulation": true}
+{"question": "How early before my program end date can I file Form I-765 for post-completion OPT?", "must_contain": ["up to 90 days prior to his or her program end date"], "in_regulation": true}
+{"question": "What is the deadline to file for post-completion OPT after my program end date?", "must_contain": ["no later than 30 days after his or her program end date"], "in_regulation": true}
+{"question": "Do I need my school to recommend me before applying for OPT?", "must_contain": ["must have a recommendation from his or her dso in order to apply for opt"], "in_regulation": true}
+{"question": "Can I appeal if USCIS denies my OPT application?", "must_contain": ["may not appeal the decision"], "in_regulation": true}
+{"question": "How many hours per week can I work on OPT while school is in session?", "must_contain": ["does not exceed 20 hours a week"], "in_regulation": true}
+{"question": "Does OPT authorization end if I transfer to another school?", "must_contain": ["automatically terminated when the student transfers"], "in_regulation": true}
+{"question": "Does my employer have to use E-Verify for STEM OPT?", "must_contain": ["employer is enrolled in e-verify"], "in_regulation": true}
+{"question": "What is the training plan form for STEM OPT students?", "must_contain": ["training plan for stem opt students, form i-983"], "in_regulation": true}
+{"question": "How soon must I submit a new training plan if I change employers during STEM OPT?", "must_contain": ["within 10 days of beginning the new practical training opportunity"], "in_regulation": true}
+{"question": "How often do STEM OPT students have to validate their information with the school?", "must_contain": ["every six months"], "in_regulation": true}
+{"question": "How quickly must I report a change of address or employer on STEM OPT?", "must_contain": ["within 10 days of the change"], "in_regulation": true}
+{"question": "Can I start working before the start date on my EAD card?", "must_contain": ["may not begin opt employment prior to the approved start date"], "in_regulation": true}
+{"question": "What accreditation must the school have for the STEM OPT degree?", "must_contain": ["accredited by an accrediting agency recognized by the department of education"], "in_regulation": true}
+{"question": "Is a STEM OPT employer allowed to replace a US worker with me?", "must_contain": ["will not replace a full- or part-time, temporary or permanent u.s. worker"], "in_regulation": true}
+{"question": "Can the government do site visits at my employer?", "must_contain": ["site visit of any employer"], "in_regulation": true}
+{"question": "Which list decides whether my degree is a STEM degree?", "must_contain": ["stem designated degree program list"], "in_regulation": true}
+{"question": "How long must I be in F-1 status before off-campus work for economic hardship?", "must_contain": ["one full academic year"], "in_regulation": true}
+{"question": "Can I travel abroad and return while on post-completion OPT?", "must_contain": ["unexpired ead issued for post-completion practical training"], "in_regulation": true}
+{"question": "What document does the DSO give me when OPT is recommended?", "must_contain": ["signed, dated form i-20"], "in_regulation": true}
+{"question": "What happens to my F-1 status while on post-completion OPT?", "must_contain": ["f-1 status is dependent upon employment"], "in_regulation": true}
+{"question": "What is curricular practical training?", "must_contain": ["curricular practical training program that is an integral part of an established curriculum"], "in_regulation": true}
+{"question": "When can I file for pre-completion OPT?", "must_contain": ["pre-completion opt", "up to 90 days before"], "in_regulation": true}
+{"question": "What is the cap-gap extension for H-1B petitions?", "must_contain": ["cap-gap", "h-1b"], "in_regulation": false}
+{"question": "Why did DHS set a longer unemployment limit for STEM OPT students?", "must_contain": ["150 days", "unemployment"], "in_regulation": false}
+{"question": "What did commenters say about the E-Verify requirement for STEM OPT employers?", "must_contain": ["e-verify", "commenters"], "in_regulation": false}
+{"question": "Why does the rule require a formal training plan for STEM OPT?", "must_contain": ["training plan", "commenters"], "in_regulation": false}

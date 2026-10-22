@@ -1,0 +1,35 @@
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.aws/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Java / Spring Boot
+target/
+build/
+.gradle/
+*.class
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+
+# Local data and tooling
+pgdata/
+.DS_Store
+.idea/
+.vscode/
+
+# Downloaded source documents (re-created by app.ingest)
+data/raw/
+.pytest_cache/
+.DS_Store
