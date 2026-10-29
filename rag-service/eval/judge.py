@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from app.config import load_settings
-from app.pricing import cost_usd
+from app.llm import make_provider
 from eval.answer_metrics import Claim, Verdict
 
 JUDGE_MAX_TOKENS = 4000
@@ -76,31 +76,21 @@ def parse_verdicts(raw_json: str, n_claims: int) -> list[Verdict]:
     return verdicts
 
 
-def make_llm_judge(usage: JudgeUsage) -> JudgeFn:
-    import anthropic
-
+def make_llm_judge(usage: JudgeUsage, provider=None) -> JudgeFn:
     settings = load_settings()
-    if not settings.judge_model:
-        raise RuntimeError("JUDGE_MODEL is not set")
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    if provider is None:
+        if not settings.judge_model:
+            raise RuntimeError("JUDGE_MODEL is not set")
+        provider = make_provider(settings.judge_provider, settings, settings.judge_model)
 
     def judge(question: str, claims: list[Claim], passages: list[str]) -> list[Verdict]:
-        request: dict = {
-            "model": settings.judge_model,
-            "max_tokens": JUDGE_MAX_TOKENS,
-            "system": JUDGE_SYSTEM,
-            "messages": [{"role": "user", "content": build_prompt(question, claims, passages)}],
-            "output_config": {"format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
-        }
         started = time.perf_counter()
-        message = client.messages.create(**request)
+        result = provider.complete(JUDGE_SYSTEM, build_prompt(question, claims, passages), JUDGE_MAX_TOKENS, VERDICT_SCHEMA)
         usage.latency_s += time.perf_counter() - started
         usage.calls += 1
-        usage.input_tokens += message.usage.input_tokens
-        usage.output_tokens += message.usage.output_tokens
-        call_cost = cost_usd(settings.judge_model, message.usage.input_tokens, message.usage.output_tokens)
-        usage.cost_usd = None if call_cost is None or usage.cost_usd is None else usage.cost_usd + call_cost
-        text = next((b.text for b in message.content if b.type == "text"), "")
-        return parse_verdicts(text, len(claims))
+        usage.input_tokens += result.input_tokens
+        usage.output_tokens += result.output_tokens
+        usage.cost_usd = None if result.cost_usd is None or usage.cost_usd is None else usage.cost_usd + result.cost_usd
+        return parse_verdicts(result.text or "", len(claims))
 
     return judge

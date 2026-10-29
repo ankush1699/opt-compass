@@ -19,6 +19,7 @@ from app.config import load_settings
 from app.db import connect
 from app.generate import answer as generate_answer
 from app.generate import format_sources
+from app.llm import has_credentials
 from app.pricing import PRICES
 from app.retrieve import search
 from eval.answer_metrics import (
@@ -86,8 +87,9 @@ def estimate(conn) -> None:
 
 def run(out: Path, resume: bool) -> None:
     settings = load_settings()
-    if not settings.anthropic_api_key:
-        sys.exit("ANTHROPIC_API_KEY is not set; refusing to run (no mocked results).")
+    for role, provider in (("generation", settings.llm_provider), ("judge", settings.judge_provider)):
+        if not has_credentials(provider, settings):
+            sys.exit(f"No API key for the {role} provider {provider!r}; refusing to run (no mocked results).")
     if not settings.judge_model:
         sys.exit("JUDGE_MODEL is not set.")
     conn = connect()
@@ -119,7 +121,8 @@ def run(out: Path, resume: bool) -> None:
                 "passages": [{"n": i, "citation": h.citation, "content": h.content} for i, h in enumerate(hits, 1)],
                 "claims": [asdict(c) for c in claims],
                 "verdicts": [asdict(v) for v in verdicts],
-                "config": {"llm_model": settings.llm_model, "llm_effort": settings.llm_effort,
+                "config": {"llm_provider": settings.llm_provider, "llm_model": settings.llm_model,
+                           "llm_effort": settings.llm_effort, "judge_provider": settings.judge_provider,
                            "judge_model": settings.judge_model, "top_k": TOP_K, "mode": MODE},
             }
             f.write(json.dumps(record) + "\n")
@@ -209,6 +212,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("estimate")
     sub.add_parser("validate")
+    sub.add_parser("models", help="list Gemini model IDs the configured key can use")
     r = sub.add_parser("run")
     r.add_argument("--out", type=Path, required=True)
     r.add_argument("--resume", action="store_true")
@@ -220,6 +224,13 @@ def main() -> None:
     args = parser.parse_args()
     if args.cmd == "estimate":
         estimate(connect())
+    elif args.cmd == "models":
+        from app.llm import list_gemini_models
+
+        settings = load_settings()
+        if not settings.gemini_api_key:
+            sys.exit("GEMINI_API_KEY is not set (put it in the repo-root .env)")
+        print("\n".join(list_gemini_models(settings)))
     elif args.cmd == "validate":
         sys.exit(1 if validate_unanswerable(connect()) else 0)
     elif args.cmd == "run":

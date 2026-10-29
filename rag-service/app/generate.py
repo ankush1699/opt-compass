@@ -2,7 +2,7 @@ import time
 from dataclasses import dataclass
 
 from app.config import load_settings
-from app.pricing import cost_usd
+from app.llm import has_credentials, make_provider
 from app.retrieve import Hit
 from app.tracing import observe
 
@@ -42,55 +42,42 @@ def format_sources(hits: list[Hit]) -> str:
     return "\n\n".join(f"[{i}] {h.citation}\n{h.content}" for i, h in enumerate(hits, start=1))
 
 
-def answer(question: str, hits: list[Hit]) -> Answer:
+def answer(question: str, hits: list[Hit], provider=None) -> Answer:
+    """Generate a cited answer. `provider` is injectable for tests; by default it comes from settings."""
     settings = load_settings()
-    if not settings.anthropic_api_key or not hits:
+    if provider is None:
+        if not has_credentials(settings.llm_provider, settings) or not hits:
+            return Answer(None, "retrieval-only")
+        provider = make_provider(settings.llm_provider, settings, settings.llm_model, settings.llm_effort)
+    elif not hits:
         return Answer(None, "retrieval-only")
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    request: dict = {
-        "model": settings.llm_model,
-        "max_tokens": MAX_TOKENS,
-        "system": SYSTEM_PROMPT,
-        "messages": [
-            {"role": "user", "content": f"Sources:\n\n{format_sources(hits)}\n\nQuestion: {question}"}
-        ],
-    }
-    if settings.llm_effort:
-        request["output_config"] = {"effort": settings.llm_effort}
+    user = f"Sources:\n\n{format_sources(hits)}\n\nQuestion: {question}"
     with observe(
         "generate",
         as_type="generation",
         model=settings.llm_model,
-        model_parameters={"max_tokens": MAX_TOKENS, "effort": settings.llm_effort or "default"},
+        model_parameters={"provider": settings.llm_provider, "max_tokens": MAX_TOKENS, "effort": settings.llm_effort or "default"},
         input={"question": question, "passages": [h.citation for h in hits]},
     ) as span:
         started = time.perf_counter()
-        message = client.messages.create(**request)
+        result = provider.complete(SYSTEM_PROMPT, user, MAX_TOKENS)
         latency = time.perf_counter() - started
-        text = "".join(b.text for b in message.content if b.type == "text") or None
-        mode = "generated"
-        if message.stop_reason == "refusal":
-            mode, text = "refused", None
-        elif message.stop_reason == "max_tokens":
-            mode = "truncated"
-        cost = cost_usd(settings.llm_model, message.usage.input_tokens, message.usage.output_tokens)
+        mode = {"refusal": "refused", "max_tokens": "truncated"}.get(result.stop_reason or "", "generated")
         details: dict = {
-            "output": text,
-            "usage_details": {"input": message.usage.input_tokens, "output": message.usage.output_tokens},
-            "metadata": {"stop_reason": message.stop_reason, "mode": mode},
+            "output": result.text,
+            "usage_details": {"input": result.input_tokens, "output": result.output_tokens},
+            "metadata": {"stop_reason": result.stop_reason, "mode": mode},
         }
-        if cost is not None:
-            details["cost_details"] = {"total": cost}
+        if result.cost_usd is not None:
+            details["cost_details"] = {"total": result.cost_usd}
         span.update(**details)
     return Answer(
-        text=text,
+        text=result.text,
         mode=mode,
         model=settings.llm_model,
-        input_tokens=message.usage.input_tokens,
-        output_tokens=message.usage.output_tokens,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
         latency_s=latency,
-        cost_usd=cost,
-        stop_reason=message.stop_reason,
+        cost_usd=result.cost_usd,
+        stop_reason=result.stop_reason,
     )
