@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from app.db import connect
 from app.generate import DISCLAIMER, answer
 from app.retrieve import search
+from app.tracing import trace
 
 
 class AskRequest(BaseModel):
@@ -47,12 +48,16 @@ def health() -> dict:
 
 @app.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest) -> AskResponse:
-    try:
-        hits = search(app.state.conn, req.question, req.top_k, req.mode)
-    except Exception as exc:  # a failed query must not poison the shared connection
-        app.state.conn.rollback()
-        raise HTTPException(status_code=500, detail="retrieval failed") from exc
-    result = answer(req.question, hits)
+    with trace("ask", metadata={"retrieval_mode": req.mode, "top_k": str(req.top_k)}) as root:
+        root.update(input={"question": req.question})
+        try:
+            hits = search(app.state.conn, req.question, req.top_k, req.mode)
+        except Exception as exc:  # a failed query must not poison the shared connection
+            app.state.conn.rollback()
+            root.update(level="ERROR", status_message="retrieval failed")
+            raise HTTPException(status_code=500, detail="retrieval failed") from exc
+        result = answer(req.question, hits)
+        root.update(output={"mode": result.mode, "answer": result.text, "cost_usd": result.cost_usd})
     return AskResponse(
         answer=result.text,
         mode=result.mode,

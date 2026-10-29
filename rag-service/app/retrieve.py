@@ -5,6 +5,7 @@ import psycopg
 
 from app.embeddings import embed_query
 from app.rerank import rerank_scores
+from app.tracing import observe
 
 RRF_K = 60
 CANDIDATES = 30
@@ -55,6 +56,13 @@ def _keyword(conn: psycopg.Connection, question: str, limit: int) -> list[int]:
 
 
 def search(conn: psycopg.Connection, question: str, top_k: int = 6, mode: str = "hybrid") -> list[Hit]:
+    with observe("retrieve", as_type="retriever", input={"question": question, "mode": mode, "top_k": top_k}) as span:
+        hits = _search(conn, question, top_k, mode)
+        span.update(output=[{"citation": h.citation, "score": round(h.score, 4)} for h in hits])
+    return hits
+
+
+def _search(conn: psycopg.Connection, question: str, top_k: int = 6, mode: str = "hybrid") -> list[Hit]:
     """mode: 'dense' (vector only), 'keyword' (full text only), 'hybrid' (reciprocal rank fusion)
     or 'rerank' (hybrid pool re-scored by a cross-encoder)."""
     rankings: list[tuple[str, list[int]]] = []
@@ -80,7 +88,8 @@ def search(conn: psycopg.Connection, question: str, top_k: int = 6, mode: str = 
         scores[chunk_id] *= SOURCE_WEIGHT.get(rows[chunk_id][1], 1.0)
     if mode == "rerank":
         pool = sorted(scores, key=scores.get, reverse=True)[:RERANK_POOL]
-        relevance = rerank_scores(question, [rows[i][4] for i in pool])
+        with observe("rerank", input={"candidates": len(pool)}):
+            relevance = rerank_scores(question, [rows[i][4] for i in pool])
         scores = {i: p * SOURCE_WEIGHT.get(rows[i][1], 1.0) for i, p in zip(pool, relevance)}
     best = sorted(scores, key=scores.get, reverse=True)[:top_k]
     return [Hit(*rows[i], score=scores[i]) for i in best]
