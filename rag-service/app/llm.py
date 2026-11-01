@@ -16,6 +16,7 @@ from app.pricing import cost_usd
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 RETRY_STATUSES = {429, 500, 502, 503, 504}
 MAX_ATTEMPTS = 5
+MAX_RETRY_WAIT_S = 120  # a longer wait means a quota (e.g. the daily free-tier cap), not a blip: fail loudly instead of sleeping for hours
 
 
 @dataclass
@@ -113,7 +114,10 @@ class GeminiProvider:
                 break
             if attempt == MAX_ATTEMPTS:
                 raise ProviderError(f"Gemini returned {response.status_code} after {MAX_ATTEMPTS} attempts")
-            self.sleep(self._retry_delay(response, attempt))
+            delay = self._retry_delay(response, attempt)
+            if delay > MAX_RETRY_WAIT_S:
+                raise ProviderError(f"Gemini {self.model} asked to wait {delay / 60:.0f} min (quota exhausted); not waiting. Resume later.")
+            self.sleep(delay)
         if response.status_code != 200:
             raise ProviderError(f"Gemini returned {response.status_code}: {response.text[:300]}")
         return self._parse(response.json())

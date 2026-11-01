@@ -98,3 +98,11 @@ def test_blocked_and_truncated_responses_are_flagged(monkeypatch):
     assert provider(lambda r: ok(text="x", finish="SAFETY"), monkeypatch).complete("s", "u", 1).stop_reason == "refusal"
     assert provider(lambda r: httpx.Response(200, json={"candidates": [], "usageMetadata": {}}), monkeypatch).complete("s", "u", 1).text is None
     assert provider(lambda r: ok(finish="MAX_TOKENS"), monkeypatch).complete("s", "u", 1).stop_reason == "max_tokens"
+
+
+def test_refuses_to_sleep_for_hours_when_the_daily_quota_is_exhausted(monkeypatch):
+    sleeps = []
+    quota = httpx.Response(429, text='{"error": {"details": [{"retryDelay": "9900s"}]}}')
+    with pytest.raises(ProviderError, match="quota exhausted"):
+        provider(lambda r: quota, monkeypatch, sleeps=sleeps).complete("s", "u", 100)
+    assert sleeps == []
