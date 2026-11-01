@@ -5,7 +5,7 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 
 > General information from public regulations, not legal advice. Confirm anything important with your school's DSO or an immigration attorney.
 
-**Status: milestone 1.5 (answer-quality evaluation and tracing) plus a round of retrieval and prompt fixes.** Only `rag-service/` and `observability/` exist. Milestone 2 is in progress: the gateway is built (below); the MCP server and agent are not yet. CI and AWS deployment are milestone 3 and are not built.
+**Status: milestone 1.5 (answer-quality evaluation and tracing) plus a round of retrieval and prompt fixes.** Only `rag-service/` and `observability/` exist. Milestone 2 is in progress: the gateway and MCP server are built (below); the agent is not yet. CI and AWS deployment are milestone 3 and are not built.
 
 ## Feature status
 
@@ -21,7 +21,8 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 | Judge validation by hand-labelling | built and tested; 18 claims labelled, results below |
 | Judge sensitivity probe (`eval/judge_probe.py`) | built and tested; one live run on 11 cases, results below |
 | Langfuse tracing (self-hosted) | built and tested for retrieval and rerank spans; generation token and cost recording verified only against a fake model reply, not a live traced run |
-| MCP server, LangGraph agent | planned (M2) |
+| MCP server (`search_regulations`, `get_section`, `ask`) | built and tested; run end to end over stdio with the official MCP client (transcript below); not yet tried inside Claude Desktop or Claude Code |
+| LangGraph agent | planned (M2) |
 | Dockerfiles, CI, AWS deployment | planned (M3) |
 
 ## What works today
@@ -160,6 +161,41 @@ Every `/ask` writes one JSON line to stdout: key *name* (never the secret), stat
 
 Limits, stated plainly: the rate limiter is in memory (one process; counts reset on restart; rejected keys do not use up anyone's allowance). All requests share one database connection. There is no per-key spend cap. Streaming through Gemini is real token streaming (`streamGenerateContent`), retried only before the first byte; Gemini's free tier is slow and flaky, and one live non-streaming call timed out (the gateway now returns 502 for that).
 
+## MCP server
+
+`app/mcp_server.py` uses the official Python SDK (`mcp` 2.3.0, `MCPServer`) and speaks stdio, so a client starts it as a subprocess. Tools:
+
+| tool | what it does |
+|---|---|
+| `search_regulations(query, top_k=6)` | the retrieval pipeline above; returns passages with text, `citation`, a short `citation_id`, `kind` (REGULATION or COMMENTARY), url, score |
+| `get_section(citation_id)` | the full indexed text of one section, e.g. `8 CFR 214.2(f)(10)`, in document order (cut at 20,000 characters, flagged `truncated`) |
+| `ask(question)` | the full cited answer from the server's configured model, with sources and usage; answer is null if no model is configured |
+
+Register it (replace the path with your checkout; the server reads the repo-root `.env` for the database and model settings):
+
+```bash
+claude mcp add --transport stdio --env PYTHONPATH=/ABSOLUTE/PATH/opt-compass/rag-service opt-compass \
+  -- /ABSOLUTE/PATH/opt-compass/rag-service/.venv/bin/python -m app.mcp_server
+```
+
+or, for Claude Desktop, in its `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "opt-compass": {
+      "command": "/ABSOLUTE/PATH/opt-compass/rag-service/.venv/bin/python",
+      "args": ["-m", "app.mcp_server"],
+      "env": { "PYTHONPATH": "/ABSOLUTE/PATH/opt-compass/rag-service" }
+    }
+  }
+}
+```
+
+The database container must be running (`docker compose up -d db`). The first tool call loads the embedding model, which takes a few seconds.
+
+**What has and has not been verified.** `python examples/mcp_client_demo.py` starts the server as a subprocess and calls every tool through the official MCP client over stdio; the output of that run (2026-11-01, real database, real Gemini free-tier call for `ask`) is saved in `rag-service/examples/mcp_transcript_2026-11-01.txt`. I have **not** run it inside Claude Desktop or Claude Code (the `claude` command is not installed on the machine this was built on), so the two registration snippets above are from the Claude Code docs and the SDK, not from a session I watched. Note also that in that transcript the top search result for "does OPT end if I transfer schools" is not the paragraph that answers it (that one is in `ask`'s sources); `search_regulations` is the same retrieval whose hit@1 is 0.82 on the dev set.
+
 ## Sources and one deliberate limit
 
 uscis.gov and ice.gov return HTTP 403 to scripted requests. This project does not try to get around that. Pages from those sites can be added by saving them yourself into `data/manual/` (see the README there). Regulation citations are pinned to the top-level paragraph, e.g. `8 CFR 214.2(f)(10) Practical training`; the deeper outline levels ((ii), (E), ...) cannot be recovered reliably from the flat eCFR XML, so they stay in the quoted text and are never guessed into a citation.
@@ -199,5 +235,5 @@ Configuration is environment variables; see `.env.example`. Never commit `.env`.
 |---|---|---|
 | M1 | retrieval slice and retrieval eval | built and tested |
 | M1.5 | answer-quality eval, judge validation, Langfuse tracing, then retrieval and prompt fixes | built and tested; fixes partly re-evaluated |
-| M2 | FastAPI gateway (SSE streaming, API-key auth, rate limit, cost per request), MCP server, LangGraph agent with refusal path | gateway built and tested; MCP server and agent planned |
+| M2 | FastAPI gateway (SSE streaming, API-key auth, rate limit, cost per request), MCP server, LangGraph agent with refusal path | gateway and MCP server built and tested; agent planned |
 | M3 | Dockerfiles, GitHub Actions CI with a retrieval-eval gate, AWS deployment | planned |
