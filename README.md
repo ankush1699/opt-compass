@@ -21,7 +21,7 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 | Judge validation by hand-labelling | built and tested; 18 claims labelled, results below |
 | Judge sensitivity probe (`eval/judge_probe.py`) | built and tested; one live run on 11 cases, results below |
 | Langfuse tracing (self-hosted) | built and tested for retrieval and rerank spans; generation token and cost recording verified only against a fake model reply, not a live traced run |
-| MCP server (`search_regulations`, `get_section`, `ask`) | built and tested; run end to end over stdio with the official MCP client (transcript below); not yet tried inside Claude Desktop or Claude Code |
+| MCP server (`search_regulations`, `get_section`, `ask`) | built and tested; run end to end over stdio with the official MCP client (transcript below); `search_regulations` and `ask` also used from Claude Code 2.1.316 (session notes in `rag-service/examples/`); not tried in Claude Desktop, `get_section` not exercised there |
 | LangGraph agent with step limit and refusal path | built and tested; one live run on 10 multi-part questions and 8 refusal probes (below); faithfulness of its answers not yet judged |
 | Dockerfiles, CI, AWS deployment | planned (M3) |
 
@@ -194,7 +194,7 @@ or, for Claude Desktop, in its `claude_desktop_config.json`:
 
 The database container must be running (`docker compose up -d db`). The first tool call loads the embedding model, which takes a few seconds.
 
-**What has and has not been verified.** `python examples/mcp_client_demo.py` starts the server as a subprocess and calls every tool through the official MCP client over stdio; the output of that run (2026-11-01, real database, real Gemini free-tier call for `ask`) is saved in `rag-service/examples/mcp_transcript_2026-11-01.txt`. I have **not** run it inside Claude Desktop or Claude Code (the `claude` command is not installed on the machine this was built on), so the two registration snippets above are from the Claude Code docs and the SDK, not from a session I watched. Note also that in that transcript the top search result for "does OPT end if I transfer schools" is not the paragraph that answers it (that one is in `ask`'s sources); `search_regulations` is the same retrieval whose hit@1 is 0.82 on the dev set.
+**What has and has not been verified.** `python examples/mcp_client_demo.py` starts the server as a subprocess and calls every tool through the official MCP client over stdio; the output of that run (2026-11-01, real database, real Gemini free-tier call for `ask`) is saved in `rag-service/examples/mcp_transcript_2026-11-01.txt`. On 2026-11-01 I also registered the server in Claude Code 2.1.316 with the command above and called `search_regulations` and `ask` from it; what was pasted from that session is in `rag-service/examples/claude_code_session_2026-11-01.md`. It is Claude Code's replies, not raw tool output, and `get_section` was not called. The first `ask` attempt there failed because `LLM_MODEL` was empty in `.env`; the server hid the cause, which is now fixed and tested. I have **not** tried Claude Desktop; its snippet above is from the SDK and docs. Two weak points seen in these runs: in the stdio transcript the top search result for "does OPT end if I transfer schools" is not the paragraph that answers it (that one is in `ask`'s sources; `search_regulations` is the same retrieval whose hit@1 is 0.82 on the dev set), and citations stop at the section level, e.g. `8 CFR 214.2(f)(10)` for a paragraph that is (E) inside it.
 
 ## Agent (LangGraph)
 
