@@ -32,7 +32,8 @@ def _client(monkeypatch, hits, generated=None):
     monkeypatch.setattr(main, "connect", lambda: FakeConn())
     monkeypatch.setattr(main, "search", lambda *_a, **_k: hits)
     monkeypatch.setattr(main, "answer", lambda *_a, **_k: generated or Answer(None, "retrieval-only"))
-    return TestClient(main.app)
+    monkeypatch.setenv("API_KEYS", "tester:secret-123")
+    return TestClient(main.app, headers={"X-API-Key": "secret-123"})
 
 
 HIT = Hit(1, "eCFR", "https://example.test/ecfr", "8 CFR 214.2(f)(10) Practical training", "text " * 200, 0.0321)

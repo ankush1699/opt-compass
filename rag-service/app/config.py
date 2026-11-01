@@ -33,6 +33,8 @@ class Settings:
     gemini_free_tier: bool
     gemini_min_interval_s: float
     top_k: int = 6
+    api_keys: str = ""  # "name:secret,name2:secret2"; the gateway refuses every request when empty
+    rate_limit_per_minute: int = 20
 
 
 def load_settings() -> Settings:
@@ -51,4 +53,6 @@ def load_settings() -> Settings:
         gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
         gemini_free_tier=os.getenv("GEMINI_FREE_TIER", "1") == "1",
         gemini_min_interval_s=float(os.getenv("GEMINI_MIN_INTERVAL_S", "6.5")),
+        api_keys=os.getenv("API_KEYS", ""),
+        rate_limit_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "20")),
     )

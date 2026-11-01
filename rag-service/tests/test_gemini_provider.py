@@ -106,3 +106,61 @@ def test_refuses_to_sleep_for_hours_when_the_daily_quota_is_exhausted(monkeypatc
     with pytest.raises(ProviderError, match="quota exhausted"):
         provider(lambda r: quota, monkeypatch, sleeps=sleeps).complete("s", "u", 100)
     assert sleeps == []
+
+
+def sse(*chunks):
+    body = "".join(f"data: {json.dumps(c)}\r\n\r\n" for c in chunks)
+    return httpx.Response(200, content=body.encode(), headers={"content-type": "text/event-stream"})
+
+
+def test_stream_yields_text_deltas_then_one_result_with_usage(monkeypatch):
+    seen = {}
+
+    def handler(request):
+        seen["url"], seen["body"] = str(request.url), json.loads(request.content)
+        return sse(
+            {"candidates": [{"content": {"parts": [{"text": "Ninety "}]}}]},
+            {"candidates": [{"content": {"parts": [{"text": "days [1]."}]}, "finishReason": "STOP"}],
+             "usageMetadata": {"promptTokenCount": 1200, "candidatesTokenCount": 6, "thoughtsTokenCount": 4}},
+        )
+
+    items = list(provider(handler, monkeypatch).stream("SYSTEM", "USER", 500))
+    assert items[:2] == ["Ninety ", "days [1]."]
+    result = items[2]
+    assert (result.text, result.stop_reason) == ("Ninety days [1].", "end_turn")
+    assert (result.input_tokens, result.output_tokens, result.cost_usd) == (1200, 10, 0.0)
+    assert seen["url"].endswith(":streamGenerateContent?alt=sse")
+    assert seen["body"]["systemInstruction"]["parts"][0]["text"] == "SYSTEM"
+
+
+def test_stream_retries_before_the_first_byte_and_skips_thought_parts(monkeypatch):
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(503, text="high demand")
+        return sse({"candidates": [{"content": {"parts": [{"text": "hidden", "thought": True}, {"text": "Yes [1]."}]}, "finishReason": "STOP"}]})
+
+    sleeps = []
+    items = list(provider(handler, monkeypatch, sleeps=sleeps).stream("S", "U", 100))
+    assert len(calls) == 2 and len(sleeps) == 1
+    assert items[0] == "Yes [1]." and items[-1].text == "Yes [1]."
+
+
+def test_stream_raises_on_a_client_error_and_on_quota_exhaustion(monkeypatch):
+    with pytest.raises(ProviderError, match="400"):
+        list(provider(lambda r: httpx.Response(400, text="bad"), monkeypatch).stream("S", "U", 100))
+    quota = httpx.Response(429, text='{"error": {"details": [{"retryDelay": "5000s"}]}}')
+    with pytest.raises(ProviderError, match="quota exhausted"):
+        list(provider(lambda r: quota, monkeypatch).stream("S", "U", 100))
+
+
+def test_timeouts_and_dropped_connections_become_provider_errors(monkeypatch):
+    def hang(request):
+        raise httpx.ReadTimeout("slow", request=request)
+
+    with pytest.raises(ProviderError, match="ReadTimeout"):
+        provider(hang, monkeypatch).complete("S", "U", 100)
+    with pytest.raises(ProviderError, match="ReadTimeout"):
+        list(provider(hang, monkeypatch).stream("S", "U", 100))

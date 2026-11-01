@@ -5,7 +5,7 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 
 > General information from public regulations, not legal advice. Confirm anything important with your school's DSO or an immigration attorney.
 
-**Status: milestone 1.5 (answer-quality evaluation and tracing) plus a round of retrieval and prompt fixes.** Only `rag-service/` and `observability/` exist. The API gateway, MCP server, agent, CI and AWS deployment are later milestones and are not built yet.
+**Status: milestone 1.5 (answer-quality evaluation and tracing) plus a round of retrieval and prompt fixes.** Only `rag-service/` and `observability/` exist. Milestone 2 is in progress: the gateway is built (below); the MCP server and agent are not yet. CI and AWS deployment are milestone 3 and are not built.
 
 ## Feature status
 
@@ -16,11 +16,12 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 | Abbreviation expansion (OPT, DSO, SEVIS...) in retrieval | built and tested; helps the dev set, mixed on 11 held-out questions, see below |
 | Sources labelled REGULATION or COMMENTARY in the prompt | built and tested; only partly re-evaluated after the change (see "After the fixes") |
 | `POST /ask` with cited answers | built and tested |
+| Gateway: API-key auth, per-key rate limit, SSE streaming, cost per request, access log | built and tested (unit tests); live-checked once each on 2026-11-01: SSE through Gemini, 401, 429 with `Retry-After`; the Anthropic streaming path has never been run against the real API |
 | Answer-quality eval (faithfulness, citation accuracy, abstention) | built and tested; one live run, results below |
 | Judge validation by hand-labelling | built and tested; 18 claims labelled, results below |
 | Judge sensitivity probe (`eval/judge_probe.py`) | built and tested; one live run on 11 cases, results below |
 | Langfuse tracing (self-hosted) | built and tested for retrieval and rerank spans; generation token and cost recording verified only against a fake model reply, not a live traced run |
-| FastAPI gateway, MCP server, LangGraph agent | planned (M2) |
+| MCP server, LangGraph agent | planned (M2) |
 | Dockerfiles, CI, AWS deployment | planned (M3) |
 
 ## What works today
@@ -138,6 +139,27 @@ This is a floor on what the judge can do, not a rate: 11 cases, written by hand,
 - **Free-tier data use.** Google's pricing page lists free-tier content as used to improve its products. Only public regulation text and synthetic questions were sent.
 - **Free-tier operations.** The first attempt failed on `503 high demand` for the first two models chosen, and the judge allows only 20 requests per day, which is why the run spans two sessions.
 
+## Gateway (`POST /ask`)
+
+Set `API_KEYS=name:secret,name2:secret2` (repo-root `.env` or the environment) and optionally `RATE_LIMIT_PER_MINUTE` (default 20). Send the secret as `X-API-Key: <secret>` or `Authorization: Bearer <secret>`. With no keys configured every `/ask` returns 503 instead of running open. `/health` needs no key.
+
+| request | result |
+|---|---|
+| no or wrong key | 401 |
+| over the per-key limit | 429 with `Retry-After` (seconds) |
+| model provider failure (quota, timeout, 5xx) | 502 with the reason |
+| `{"question": ...}` | JSON: `answer`, `mode`, `sources`, `disclaimer`, and `usage` (model, tokens, `cost_usd`, generation and total seconds) |
+| `{"question": ..., "stream": true}` | Server-Sent Events: one `sources` event, then `token` events as the model writes, then `done` (mode, disclaimer, usage) or `error` |
+
+```bash
+curl -N localhost:8000/ask -H "X-API-Key: $KEY" -H 'content-type: application/json' \
+  -d '{"question":"Does OPT authorization end if I transfer to another school?","stream":true}'
+```
+
+Every `/ask` writes one JSON line to stdout: key *name* (never the secret), status, retrieval mode, question length, number of sources, answer mode, model, tokens, `cost_usd`, latency, error. The question and answer text are deliberately not logged. `cost_usd` is `0.0` on the free Gemini tier (not a list price) and the Anthropic list price otherwise.
+
+Limits, stated plainly: the rate limiter is in memory (one process; counts reset on restart; rejected keys do not use up anyone's allowance). All requests share one database connection. There is no per-key spend cap. Streaming through Gemini is real token streaming (`streamGenerateContent`), retried only before the first byte; Gemini's free tier is slow and flaky, and one live non-streaming call timed out (the gateway now returns 502 for that).
+
 ## Sources and one deliberate limit
 
 uscis.gov and ice.gov return HTTP 403 to scripted requests. This project does not try to get around that. Pages from those sites can be added by saving them yourself into `data/manual/` (see the README there). Regulation citations are pinned to the top-level paragraph, e.g. `8 CFR 214.2(f)(10) Practical training`; the deeper outline levels ((ii), (E), ...) cannot be recovered reliably from the flat eCFR XML, so they stay in the quoted text and are never guessed into a citation.
@@ -151,7 +173,8 @@ python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m app.ingest          # first run downloads the embedding model; ~10 min on CPU
 .venv/bin/python -m eval.run_eval       # retrieval metrics (--validate checks the eval phrases exist)
 .venv/bin/uvicorn app.main:app --port 8000
-curl -s localhost:8000/ask -H 'content-type: application/json' \
+# the gateway refuses every request unless API_KEYS is set (see the next section)
+curl -s localhost:8000/ask -H 'content-type: application/json' -H "X-API-Key: $KEY" \
   -d '{"question":"How many days of unemployment are allowed on post-completion OPT?"}'
 .venv/bin/python -m pytest              # unit tests, no database or network needed
 ```
@@ -176,5 +199,5 @@ Configuration is environment variables; see `.env.example`. Never commit `.env`.
 |---|---|---|
 | M1 | retrieval slice and retrieval eval | built and tested |
 | M1.5 | answer-quality eval, judge validation, Langfuse tracing, then retrieval and prompt fixes | built and tested; fixes partly re-evaluated |
-| M2 | FastAPI gateway (SSE streaming, API-key auth, rate limit, cost per request), MCP server, LangGraph agent with refusal path | planned |
+| M2 | FastAPI gateway (SSE streaming, API-key auth, rate limit, cost per request), MCP server, LangGraph agent with refusal path | gateway built and tested; MCP server and agent planned |
 | M3 | Dockerfiles, GitHub Actions CI with a retrieval-eval gate, AWS deployment | planned |
