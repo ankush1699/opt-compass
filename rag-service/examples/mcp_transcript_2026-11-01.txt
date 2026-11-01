@@ -1,0 +1,74 @@
+
+### server
+opt-compass
+
+### tools/list
+[
+  "search_regulations",
+  "get_section",
+  "ask"
+]
+
+### search_regulations(query='does OPT end if I transfer schools', top_k=3)
+[
+  {
+    "n": 1,
+    "citation_id": "8 CFR 214.2(f)(10)",
+    "citation": "8 CFR 214.2(f)(10) Practical training",
+    "kind": "REGULATION",
+    "url": "https://www.ecfr.gov/current/title-8/chapter-I/subchapter-B/part-214/section-214.2",
+    "text": "8 CFR 214.2(f)(10) Practical training (eCFR as of 2026-10-14)\n(6) Employer reporting. A student may not be aut...",
+    "score": 0.8849
+  },
+  {
+    "n": 2,
+    "citation_id": "81 FR 13040 (STEM OPT final rule), iii. Miscellaneous Other Comments",
+    "citation": "81 FR 13040 (STEM OPT final rule), iii. Miscellaneous Other Comments",
+    "kind": "COMMENTARY",
+    "url": "https://www.federalregister.gov/documents/2016/03/11/2016-04828/improving-and-expanding-training-opportunities-for-f-1-nonimmigrant-students-with-stem-degrees-and",
+    "text": "81 FR 13040 (STEM OPT final rule), iii. Miscellaneous Other Comments\nComment. A university applauded the clari...",
+    "score": 0.5884
+  },
+  {
+    "n": 3,
+    "citation_id": "81 FR 13040 (STEM OPT final rule), 1. OPT Background",
+    "citation": "81 FR 13040 (STEM OPT final rule), 1. OPT Background",
+    "kind": "COMMENTARY",
+    "url": "https://www.federalregister.gov/documents/2016/03/11/2016-04828/improving-and-expanding-training-opportunities-for-f-1-nonimmigrant-students-with-stem-degrees-and",
+    "text": "81 FR 13040 (STEM OPT final rule), 1. OPT Background\nAn F-1 student may seek employment through OPT either dur...",
+    "score": 0.5595
+  }
+]
+
+### get_section(citation_id='8 CFR 214.2(f)(10)')
+{
+  "citation": "8 CFR 214.2(f)(10) Practical training",
+  "kind": "REGULATION",
+  "url": "https://www.ecfr.gov/current/title-8/chapter-I/subchapter-B/part-214/section-214.2",
+  "chunks": 26,
+  "text": "8 CFR 214.2(f)(10) Practical training (eCFR as of 2026-10-14)\n(10) Practical training. Practical training may be authorized to an F-1 student who has been lawfully enrolled on a full-time basis, in an approved SEVP-certified college, university, conservatory, or seminary for one full academic year. ...",
+  "truncated": true
+}
+
+### get_section(citation_id='8 CFR 999')  (is_error=True)
+Error executing tool get_section: No indexed section matches '8 CFR 999'. Call search_regulations first and use a citation_id from its results.
+
+### ask(question='Does OPT authorization end if I transfer to another school?')
+{
+  "answer": "Yes, authorization to engage in optional practical training employment is automatically terminated when the student transfers to another school or begins study at another educational level [1].",
+  "mode": "generated",
+  "usage": {
+    "model": "gemini-3.5-flash-lite",
+    "input_tokens": 2066,
+    "output_tokens": 30,
+    "cost_usd": 0.0
+  },
+  "sources": [
+    "[1] REGULATION: 8 CFR 214.2(f)(10) Practical training",
+    "[2] REGULATION: 8 CFR 214.2(f)(10) Practical training",
+    "[3] COMMENTARY: 81 FR 13040 (STEM OPT final rule), 1. OPT Background",
+    "[4] COMMENTARY: 81 FR 13040 (STEM OPT final rule), iii. Miscellaneous Other Comments",
+    "[5] REGULATION: 8 CFR 214.2(f)(10) Practical training",
+    "[6] COMMENTARY: 81 FR 13040 (STEM OPT final rule), Subpart B\u2014Employment Authorization"
+  ]
+}

@@ -5,6 +5,7 @@ import psycopg
 
 from app.embeddings import embed_query
 from app.rerank import rerank_scores
+from app.tracing import observe
 
 RRF_K = 60
 CANDIDATES = 30
@@ -14,6 +15,19 @@ RERANK_POOL = 20
 # when it is clearly the better match.
 SOURCE_WEIGHT = {"eCFR": 1.0, "Saved page": 1.0, "Federal Register": 0.6}
 LEG_WEIGHT = {"dense": 1.0, "keyword": 0.5}
+# The regulation spells these out and the embedding model does not reliably link an abbreviation to its
+# phrase: for "Does OPT authorization end if I transfer to another school?" the chunk that answers it
+# ("optional practical training ... terminated when the student transfers") ranked 146th of 550.
+GLOSSARY = {
+    "pdso": "principal designated school official",
+    "dso": "designated school official",
+    "opt": "optional practical training",
+    "cpt": "curricular practical training",
+    "sevis": "Student and Exchange Visitor Information System",
+    "sevp": "Student and Exchange Visitor Program",
+    "ead": "employment authorization document",
+}
+_ABBREVIATION = re.compile(r"\b(" + "|".join(GLOSSARY) + r")\b", re.IGNORECASE)
 STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "do", "does", "did", "can", "i", "my", "me", "we",
     "to", "of", "in", "on", "for", "and", "or", "if", "how", "what", "when", "which", "who", "it",
@@ -29,6 +43,20 @@ class Hit:
     citation: str
     content: str
     score: float
+
+
+def expand_query(question: str) -> str:
+    """Append the full phrase after the first use of each known abbreviation, keeping the user's words."""
+    seen: set[str] = set()
+
+    def spell_out(match: re.Match) -> str:
+        key = match.group(1).lower()
+        if key in seen or GLOSSARY[key] in question.lower():
+            return match.group(0)
+        seen.add(key)
+        return f"{match.group(0)} ({GLOSSARY[key]})"
+
+    return _ABBREVIATION.sub(spell_out, question)
 
 
 def _or_query(question: str) -> str:
@@ -55,7 +83,20 @@ def _keyword(conn: psycopg.Connection, question: str, limit: int) -> list[int]:
 
 
 def search(conn: psycopg.Connection, question: str, top_k: int = 6, mode: str = "hybrid") -> list[Hit]:
-    """mode: 'dense' (vector only), 'keyword' (full text only), 'hybrid' (reciprocal rank fusion)
+    expanded = expand_query(question)
+    with observe(
+        "retrieve", as_type="retriever", input={"question": question, "mode": mode, "top_k": top_k}, metadata={"expanded_query": expanded}
+    ) as span:
+        hits = _search(conn, expanded, top_k, mode, rerank_question=question)
+        span.update(output=[{"citation": h.citation, "score": round(h.score, 4)} for h in hits])
+    return hits
+
+
+def _search(conn: psycopg.Connection, question: str, top_k: int = 6, mode: str = "hybrid", rerank_question: str | None = None) -> list[Hit]:
+    """The candidate legs search `question` as given (callers pass the abbreviation-expanded text), while the cross-encoder
+    scores against `rerank_question`, the user's own words: expanding everywhere measured worse on both question sets.
+
+    mode: 'dense' (vector only), 'keyword' (full text only), 'hybrid' (reciprocal rank fusion)
     or 'rerank' (hybrid pool re-scored by a cross-encoder)."""
     rankings: list[tuple[str, list[int]]] = []
     if mode in ("dense", "hybrid", "rerank"):
@@ -80,7 +121,8 @@ def search(conn: psycopg.Connection, question: str, top_k: int = 6, mode: str = 
         scores[chunk_id] *= SOURCE_WEIGHT.get(rows[chunk_id][1], 1.0)
     if mode == "rerank":
         pool = sorted(scores, key=scores.get, reverse=True)[:RERANK_POOL]
-        relevance = rerank_scores(question, [rows[i][4] for i in pool])
+        with observe("rerank", input={"candidates": len(pool)}):
+            relevance = rerank_scores(rerank_question or question, [rows[i][4] for i in pool])
         scores = {i: p * SOURCE_WEIGHT.get(rows[i][1], 1.0) for i, p in zip(pool, relevance)}
     best = sorted(scores, key=scores.get, reverse=True)[:top_k]
     return [Hit(*rows[i], score=scores[i]) for i in best]

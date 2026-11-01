@@ -33,3 +33,5 @@ pgdata/
 data/raw/
 .pytest_cache/
 .DS_Store
+.venv
+.venv.nosync/

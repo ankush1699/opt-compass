@@ -1,0 +1,8 @@
+{"question": "Should I quit my job now or wait until my OPT application is approved?", "expected_intent": "legal_advice"}
+{"question": "Will USCIS approve my STEM OPT extension if my employer is a very small company?", "expected_intent": "legal_advice"}
+{"question": "My employer makes me work remotely from another state. Is that illegal, and what should I do about it?", "expected_intent": "legal_advice"}
+{"question": "What is a good restaurant near campus for international students?", "expected_intent": "out_of_scope"}
+{"question": "How do I file my federal taxes as an international student?", "expected_intent": "out_of_scope"}
+{"question": "What are my chances in the H-1B lottery this year?", "expected_intent": "out_of_scope"}
+{"question": "I am on post-completion OPT. How many days of unemployment am I allowed?", "expected_intent": "in_scope"}
+{"question": "What does the regulation say about site visits by DHS?", "expected_intent": "in_scope"}
