@@ -5,7 +5,7 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 
 > General information from public regulations, not legal advice. Confirm anything important with your school's DSO or an immigration attorney.
 
-**Status: milestone 1.5 (answer-quality evaluation and tracing) plus a round of retrieval and prompt fixes.** Only `rag-service/` and `observability/` exist. Milestone 2 is in progress: the gateway and MCP server are built (below); the agent is not yet. CI and AWS deployment are milestone 3 and are not built.
+**Status: milestone 1.5 (answer-quality evaluation and tracing) plus a round of retrieval and prompt fixes.** Only `rag-service/` and `observability/` exist. Milestone 2 (gateway, MCP server, agent) is built; its evaluation is partial (below). CI and AWS deployment are milestone 3 and are not built.
 
 ## Feature status
 
@@ -22,7 +22,7 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 | Judge sensitivity probe (`eval/judge_probe.py`) | built and tested; one live run on 11 cases, results below |
 | Langfuse tracing (self-hosted) | built and tested for retrieval and rerank spans; generation token and cost recording verified only against a fake model reply, not a live traced run |
 | MCP server (`search_regulations`, `get_section`, `ask`) | built and tested; run end to end over stdio with the official MCP client (transcript below); not yet tried inside Claude Desktop or Claude Code |
-| LangGraph agent | planned (M2) |
+| LangGraph agent with step limit and refusal path | built and tested; one live run on 10 multi-part questions and 8 refusal probes (below); faithfulness of its answers not yet judged |
 | Dockerfiles, CI, AWS deployment | planned (M3) |
 
 ## What works today
@@ -196,6 +196,45 @@ The database container must be running (`docker compose up -d db`). The first to
 
 **What has and has not been verified.** `python examples/mcp_client_demo.py` starts the server as a subprocess and calls every tool through the official MCP client over stdio; the output of that run (2026-11-01, real database, real Gemini free-tier call for `ask`) is saved in `rag-service/examples/mcp_transcript_2026-11-01.txt`. I have **not** run it inside Claude Desktop or Claude Code (the `claude` command is not installed on the machine this was built on), so the two registration snippets above are from the Claude Code docs and the SDK, not from a session I watched. Note also that in that transcript the top search result for "does OPT end if I transfer schools" is not the paragraph that answers it (that one is in `ask`'s sources); `search_regulations` is the same retrieval whose hit@1 is 0.82 on the dev set.
 
+## Agent (LangGraph)
+
+`app/agent.py`, run with `python -m app.agent "<question>"`. Graph: `plan` (one model call: in scope, legal advice, or out of scope, and the question split into up to 4 parts) then `research` (retrieval for each part, 3 passages each, at most 10 in total, no model call) then `synthesize` (one model call: a cited answer, plus up to 2 follow-up searches for parts the sources did not cover). If it asked for follow-ups, one more research and synthesize round runs, then it stops. Legal-advice requests (what *should I* do, *will I* be approved, is my employer breaking the law) and anything outside F-1 / OPT / STEM OPT end at `refuse` before any retrieval, with a pointer to a DSO or immigration attorney.
+
+Step limit: every node counts as a step; at `max_steps` (default 8) the graph stops and returns what it has with status `step_limit`. A second guard, LangGraph's `recursion_limit`, is set from it. The longest live run used 5 steps, so the limit has only been triggered in unit tests with a fake model, never live.
+
+### Agent vs single-shot (10 multi-part questions, 2026-11-01)
+
+```bash
+cd rag-service
+LLM_PROVIDER=gemini LLM_MODEL=gemini-3.5-flash-lite .venv/bin/python -m eval.agent_eval run --out eval/results/agent-vs-single__gemini-3.5-flash-lite.jsonl
+.venv/bin/python -m eval.agent_eval report eval/results/agent-vs-single__gemini-3.5-flash-lite.jsonl
+```
+
+Single-shot is the normal pipeline (top 6 passages for the whole question, one model call). The 10 questions have 21 parts in total; the questions and the substrings that count are in `eval/agent_questions.jsonl`. Both systems used `gemini-3.5-flash-lite` on the free tier.
+
+| | single-shot | agent |
+|---|---|---|
+| parts whose answer-bearing text was in the passages (of 21) | 13 (14 with 10 passages) | 17 |
+| parts whose key fact appears in the answer text (of 21) | 15 | 18 |
+| questions with every part stated (of 10) | 5 | 7 |
+| answers containing "The indexed sources do not answer this." | 2 | 2 |
+| model calls per question (mean) | 1 | 2.3 |
+| input / output tokens per question (mean) | 2,025 / 73 | 2,553 / 220 |
+| median wall-clock time per question | 21.8 s | 52.1 s |
+| faithfulness of the answers | **not measured** | **not measured** |
+
+How to read it. The agent retrieved the needed text for 4 more parts than single-shot (3 more than single-shot with 10 passages), and the 10-passage control shows most of that comes from splitting the question, not from seeing more text. It costs about 2.3 times the model calls, three times the output tokens and, here, 2.4 times the time (the free tier forces a 6.5 s pause between calls, so absolute times are not comparable to a paid API). The gain is small and the sample is smaller: 10 questions, 21 parts, no confidence interval, questions I wrote while looking at the corpus. "Stated" is a substring check, so a wrong answer that contains the right number would pass; the judge step (`python -m eval.agent_eval judge <run>`) that would measure faithfulness for both systems needs about 20 judge calls and was not run because the free tier's daily limit was nearly used up. Until it is, nothing here says the agent's answers are as faithful as single-shot's.
+
+Where both still fail:
+
+- **a06 (cap-gap end date).** Both answers say the extension lasts until October 1. The current regulation says April 1 and neither system retrieved that paragraph, so the source labels that fixed q025 had nothing to prefer. This is the commentary-against-regulation problem again, and a wrong answer that sounds sure.
+- **a08 (STEM OPT filing deadline and appeal).** Single-shot abstained on both parts. The agent got the 60-day deadline and still found nothing on the appeal, after a follow-up search (the "may not appeal" paragraph is in the corpus).
+- **Where the retrieval gain came from.** The agent found text that single-shot did not for a03, a04 and a10 (one part each) and a05 (both parts). It went the other way on a07 (1 of 2 parts' text against single-shot's 2), though its answer still states the number. Net: 17 against 13.
+
+### Refusal path (8 probes)
+
+3 legal-advice, 3 out-of-scope and 2 in-scope controls (one phrased with "I am on post-completion OPT", to catch over-refusal): 8 of 8 classified as expected, in `eval/agent_refusals.jsonl`. The probes are mine, plain and non-adversarial; there is no prompt-injection or paraphrase test, so this shows the path works, not that it is robust. Classification is the model's call: a malformed plan falls back to treating the question as in scope, because the answer step is still grounded in the sources.
+
 ## Sources and one deliberate limit
 
 uscis.gov and ice.gov return HTTP 403 to scripted requests. This project does not try to get around that. Pages from those sites can be added by saving them yourself into `data/manual/` (see the README there). Regulation citations are pinned to the top-level paragraph, e.g. `8 CFR 214.2(f)(10) Practical training`; the deeper outline levels ((ii), (E), ...) cannot be recovered reliably from the flat eCFR XML, so they stay in the quoted text and are never guessed into a citation.
@@ -235,5 +274,5 @@ Configuration is environment variables; see `.env.example`. Never commit `.env`.
 |---|---|---|
 | M1 | retrieval slice and retrieval eval | built and tested |
 | M1.5 | answer-quality eval, judge validation, Langfuse tracing, then retrieval and prompt fixes | built and tested; fixes partly re-evaluated |
-| M2 | FastAPI gateway (SSE streaming, API-key auth, rate limit, cost per request), MCP server, LangGraph agent with refusal path | gateway and MCP server built and tested; agent planned |
+| M2 | FastAPI gateway (SSE streaming, API-key auth, rate limit, cost per request), MCP server, LangGraph agent with refusal path | built and tested; agent vs single-shot measured on 10 questions, faithfulness judge step not yet run |
 | M3 | Dockerfiles, GitHub Actions CI with a retrieval-eval gate, AWS deployment | planned |
