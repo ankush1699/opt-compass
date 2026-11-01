@@ -85,23 +85,26 @@ def estimate(conn) -> None:
         print(f"{model:<20}{g:>12.3f}{j:>10.3f}")
 
 
-def run(out: Path, resume: bool) -> None:
+def run(out: Path, resume: bool, only: set[str] | None = None, use_judge: bool = True) -> None:
+    """`only` re-runs just those question ids; `use_judge=False` generates without judging (free-tier judge quota is
+    small), which is enough to count abstentions but leaves no verdicts, so `report` refuses such a file."""
     settings = load_settings()
-    for role, provider in (("generation", settings.llm_provider), ("judge", settings.judge_provider)):
+    roles = [("generation", settings.llm_provider)] + ([("judge", settings.judge_provider)] if use_judge else [])
+    for role, provider in roles:
         if not has_credentials(provider, settings):
             sys.exit(f"No API key for the {role} provider {provider!r}; refusing to run (no mocked results).")
-    if not settings.judge_model:
+    if use_judge and not settings.judge_model:
         sys.exit("JUDGE_MODEL is not set.")
     conn = connect()
     judge_usage = JudgeUsage()
-    judge = make_llm_judge(judge_usage)
+    judge = make_llm_judge(judge_usage) if use_judge else None
     done = set()
     if resume and out.exists():
         done = {json.loads(line)["id"] for line in out.read_text().splitlines() if line.strip()}
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("a" if resume else "w") as f:
         for q in load_questions():
-            if q["id"] in done:
+            if q["id"] in done or (only and q["id"] not in only):
                 continue
             hits = search(conn, q["question"], TOP_K, MODE)
             ans = generate_answer(q["question"], hits)
@@ -110,7 +113,7 @@ def run(out: Path, resume: bool) -> None:
             abstained = is_abstention(ans.text)
             if ans.text and not abstained:
                 claims = split_claims(ans.text)
-                if claims:
+                if claims and use_judge:
                     verdicts = judge(q["question"], claims, passages)
             record = {
                 "id": q["id"],
@@ -147,6 +150,8 @@ def to_scored(record: dict) -> ScoredAnswer:
 
 def report(path: Path) -> dict:
     records = load_run(path)
+    if any(len(r["verdicts"]) != len(r["claims"]) for r in records):
+        sys.exit(f"{path} has claims without judge verdicts (generated with --no-judge, or incomplete); nothing to report.")
     metrics = aggregate([to_scored(r) for r in records])
     answers = [r["answer"] for r in records]
     lat = sorted(a["latency_s"] for a in answers if a["latency_s"])
@@ -216,6 +221,8 @@ def main() -> None:
     r = sub.add_parser("run")
     r.add_argument("--out", type=Path, required=True)
     r.add_argument("--resume", action="store_true")
+    r.add_argument("--only", help="comma-separated question ids, e.g. q008,q020,q025")
+    r.add_argument("--no-judge", action="store_true", help="generate only; skips the judge (and its quota)")
     for name in ("report", "sample"):
         sub.add_parser(name).add_argument("path", type=Path)
     a = sub.add_parser("agreement")
@@ -234,7 +241,7 @@ def main() -> None:
     elif args.cmd == "validate":
         sys.exit(1 if validate_unanswerable(connect()) else 0)
     elif args.cmd == "run":
-        run(args.out, args.resume)
+        run(args.out, args.resume, set(args.only.split(",")) if args.only else None, not args.no_judge)
     elif args.cmd == "report":
         sys.exit(1 if gate(report(args.path)) else 0)
     elif args.cmd == "sample":

@@ -142,3 +142,13 @@ def test_cohens_kappa_known_values():
     assert cohens_kappa([True, False, True, False], [False, True, False, True]) == -1.0
     assert cohens_kappa([True, True, True], [True, True, True]) is None  # undefined when both always agree on one label
     assert cohens_kappa([], []) is None
+
+
+def test_report_refuses_a_run_that_was_generated_without_the_judge(tmp_path):
+    from eval.answer_eval import report
+
+    record = {"id": "q001", "kind": "answerable", "claims": [{"text": "x", "cited": [1]}], "verdicts": []}
+    path = tmp_path / "run.jsonl"
+    path.write_text(json.dumps(record) + "\n")
+    with pytest.raises(SystemExit):
+        report(path)

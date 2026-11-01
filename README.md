@@ -5,7 +5,7 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 
 > General information from public regulations, not legal advice. Confirm anything important with your school's DSO or an immigration attorney.
 
-**Status: milestone 1.5 (answer-quality evaluation and tracing).** Only `rag-service/` and `observability/` exist. The API gateway, MCP server, agent, CI and AWS deployment are later milestones and are not built yet.
+**Status: milestone 1.5 (answer-quality evaluation and tracing) plus a round of retrieval and prompt fixes.** Only `rag-service/` and `observability/` exist. The API gateway, MCP server, agent, CI and AWS deployment are later milestones and are not built yet.
 
 ## Feature status
 
@@ -13,6 +13,8 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 |---|---|
 | Ingestion from eCFR and Federal Register APIs | built and tested |
 | Retrieval (dense, keyword, hybrid, rerank) | built and tested; retrieval metrics below |
+| Abbreviation expansion (OPT, DSO, SEVIS...) in retrieval | built and tested; helps the dev set, mixed on 11 held-out questions, see below |
+| Sources labelled REGULATION or COMMENTARY in the prompt | built and tested; only partly re-evaluated after the change (see "After the fixes") |
 | `POST /ask` with cited answers | built and tested |
 | Answer-quality eval (faithfulness, citation accuracy, abstention) | built and tested; one live run, results below |
 | Judge validation by hand-labelling | built and tested; 18 claims labelled, results below |
@@ -29,16 +31,29 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 - **Retrieval evaluation** (`python -m eval.run_eval`): 28 questions, each with the exact phrase the answer-bearing passage must contain.
 - **Answer evaluation** (`python -m eval.answer_eval`): 28 answerable plus 8 unanswerable questions, graded by an LLM judge claim by claim.
 
-### Retrieval results (28-question dev set, `BAAI/bge-base-en-v1.5`)
+### Retrieval results (`BAAI/bge-base-en-v1.5`)
 
-| mode | any-source hit@1 | hit@6 | primary-source hit@1 | hit@6 |
+Dev set: 28 questions, the set the chunk size and source weights were tuned on. Held-out set: 11 questions (`eval/questions_heldout.jsonl`) written afterwards and not used for any tuning. Commands: `python -m eval.run_eval` and `python -m eval.run_eval --heldout`, run 2026-11-01.
+
+| mode (dev set) | any-source hit@1 | hit@6 | primary-source hit@1 | hit@6 |
 |---|---|---|---|---|
-| dense | 0.64 | 0.93 | 0.61 | 0.82 |
-| keyword | 0.11 | 0.61 | 0.11 | 0.54 |
-| hybrid | 0.54 | 0.86 | 0.54 | 0.75 |
-| **rerank (default)** | **0.68** | **0.93** | **0.64** | **0.79** |
+| dense | 0.43 | 0.89 | 0.43 | 0.86 |
+| keyword | 0.04 | 0.50 | 0.04 | 0.43 |
+| hybrid | 0.39 | 0.86 | 0.39 | 0.82 |
+| **rerank (default)** | **0.82** | **0.96** | **0.79** | **0.93** |
 
 *any-source*: a passage from the regulation or the commentary counts. *primary-source*: questions the regulation answers must be answered by an eCFR chunk.
+
+| rerank (default) | questions | any hit@1 | any hit@6 | primary hit@1 | primary hit@6 |
+|---|---|---|---|---|---|
+| dev set, before the abbreviation fix | 28 | 0.68 | 0.93 | 0.64 | 0.79 |
+| dev set, after | 28 | 0.82 | 0.96 | 0.79 | 0.93 |
+| held-out, before | 11 | 0.73 | 1.00 | 0.73 | 1.00 |
+| held-out, after | 11 | 0.64 | 0.91 | 0.64 | 0.91 |
+| both sets, before | 39 | 27 of 39 | 37 of 39 | 26 of 39 | 33 of 39 |
+| both sets, after | 39 | 30 of 39 | 37 of 39 | 29 of 39 | 36 of 39 |
+
+The "before" rows are the same code with abbreviation expansion switched off (the dev numbers match the original README). The expansion helps on the dev set and hurts on the held-out set (one question lost at hit@6, one at hit@1), and it made the non-default modes clearly worse (dense hit@1 0.64 to 0.43 on the dev set; before-numbers for those modes on the held-out set were not measured). It is kept because it fixes a diagnosed failure, but the dev improvement is not independent evidence: the fix was found by looking at a dev question, and 11 held-out questions are too few to tell a regression from noise.
 
 What the experiments showed (each change was measured on the same set):
 
@@ -48,8 +63,9 @@ What the experiments showed (each change was measured on the same set):
 | down-weight commentary vs. regulation | dense hit@6 0.64 → 0.71; the 425 preamble chunks otherwise crowd out the 125 regulation chunks |
 | `bge-small` (384d) → `bge-base` (768d) | any-source dense hit@6 0.86 → 0.93 |
 | hybrid fusion | *worse* than dense alone; the keyword leg adds noise on a corpus this small, so it is kept only as an option |
+| spell out abbreviations (OPT, DSO, SEVIS...) in the query used to find candidates | q008's answer chunk went from rank 146 of 550 to the top 6; the cross-encoder still scores the user's own words (expanding there too measured worse: dev hit@1 0.75 vs 0.82, held-out 0.55 vs 0.64) |
 
-**Caveats, stated plainly.** 28 questions is a development set, and the chunk size and source weights were tuned on it, so treat the numbers as a baseline and not a generalisation claim.
+**Caveats, stated plainly.** 28 questions is a development set, and the chunk size, source weights and the abbreviation list were chosen while looking at it, so treat the dev numbers as a baseline and not a generalisation claim. The held-out set is small (11) and mostly questions without abbreviations, so it mainly checks that the change does not break unrelated questions.
 
 ## Answer quality (one live run)
 
@@ -77,6 +93,17 @@ Generator `gemini-3.5-flash-lite`, judge `gemini-3.6-flash` (a larger model, but
 
 The quality gate (`faithfulness >= 0.90`, `citation precision >= 0.85`, `abstain rate on unanswerable >= 0.80`, `false abstain rate <= 0.15`) **passes**. The thresholds were set before the run, but they were not calibrated against any other system, so read the pass as "no obvious failure on these 36 questions" and not as a quality guarantee.
 
+### After the fixes (partial re-evaluation, 2026-11-01)
+
+The 36-row table above is the configuration *before* the fixes. Re-judging all 36 would take two days of the free tier's 20-requests-per-day judge limit, so only part was re-done:
+
+| check | command | result |
+|---|---|---|
+| all 36 questions re-generated, no judge | `LLM_MODEL=gemini-3.5-flash-lite python -m eval.answer_eval run --no-judge --out eval/results/fixes__generate-only.jsonl` | abstained on unanswerable 8 of 8 (unchanged); false abstentions 1 of 28 (was 2 of 28): q008 now answers, q020 still abstains |
+| the 3 answers that changed, judged | `... run --only q008,q025,q026 --out eval/results/fixes__judged-q008-q025-q026.jsonl` | q008: 1 claim, supported and cited. q026: 1 claim, supported, but carries no citation. q025: 6 claims, 5 supported and cited; the lead-in "The government's reasoning ... include:" has no citation and the judge called it unsupported. The answer now states only "April 1" |
+
+What this does and does not show. The re-generation is one run of a model that is not fully deterministic even at temperature 0: when I changed the wording of the source labels, q026 flipped from answered to abstained and back, and q025 mentioned the old "October 1" date (attributed to the commentary) in three of four runs with the final wording and not in the fourth, which is the one that was judged. So "q025 fixed" means "improved and sometimes clean", not "solved". The other 33 answers were not judged again, so faithfulness 1.00 (45 of 45) still describes the pre-fix run only.
+
 ### How far to trust the judge
 
 | check | result |
@@ -100,10 +127,11 @@ This is a floor on what the judge can do, not a rate: 11 cases, written by hand,
 
 ## Known failures
 
-- **q008 (transfer ends OPT?): retrieval miss.** The right section, `8 CFR 214.2(f)(8)`, ranked first, but the chunk holding the sentence about automatic termination was not in the 6 passages. The model abstained, which is the correct behaviour given what it saw. This is a retrieval failure, and it is the same kind of miss the hit@6 numbers above leave room for.
-- **q020 (travel on post-completion OPT?): generation failure.** Passage 2 contained the answer and the model still said the sources do not answer. This is the small generator being too cautious.
+- **q008 (transfer ends OPT?): fixed by abbreviation expansion, with a caveat.** The chunk saying authorization "is automatically terminated when the student transfers" spells out "optional practical training" and never says "OPT", and it ranked 146th of 550 for the question. Spelling out OPT when searching puts it in the top 6 and the model now answers. The same change made other retrieval modes and one held-out question worse (see the retrieval results).
+- **q020 (travel on post-completion OPT?): still a generation failure.** Passage 2 contains the answer and the model still says the sources do not answer, in every run so far (five). This is the small generator being too cautious, and a prompt change to push it harder risks the 8 of 8 abstention result, so it is left alone.
 - **Uncited claims (q014, q023, q027).** Three claims carry no `[n]`, and the judge correctly reported them as supported but not by a citation. One of them is the lead-in sentence of a list.
-- **Old commentary against current regulation (q025).** The answer says the cap-gap extension lasts "until April 1 ... or until the beginning of the new fiscal year (October 1)". The current regulation says April 1; the 2016 preamble describes the older October 1 rule. The model merged them as alternatives and the judge accepted it. The corpus contains both and nothing marks the commentary as superseded.
+- **Old commentary against current regulation (q025): mitigated, not solved.** Before the fix the answer said the cap-gap extension lasts "until April 1 ... or until the beginning of the new fiscal year (October 1)": the current regulation says April 1, the 2016 preamble describes the older October 1 rule, and the judge accepted the mix. The prompt now labels each source REGULATION (current law) or COMMENTARY and tells the model to follow the regulation on conflicts. Since then the answer attributes April 1 to the regulation and, in three of four runs, also mentions October 1 as the commentary's description; one run states only April 1. The corpus still contains both and nothing in the data marks the commentary as superseded.
+- **Prompt wording is fragile.** A first version of the source labels ("may describe earlier or proposed text") made the model abstain on q026, a "why" question that only the commentary answers. Softening the wording fixed it. With a small free-tier model, treat any prompt change as needing a re-run.
 - **The generator writes very short answers** (mean about 54 output tokens). Short answers contain fewer claims, which makes a faithfulness score of 1.00 easier to reach. It is not evidence that a more verbose model would score the same.
 - **Judge and generator are both Google models**, so shared blind spots and self-preference are possible, and the judge never marked any of the 45 claims unsupported.
 - **Single run, no variance estimate.** One configuration, one pass, 36 questions. There are no confidence intervals and the retrieval and answer questions overlap, so these are development-set numbers.
@@ -147,6 +175,6 @@ Configuration is environment variables; see `.env.example`. Never commit `.env`.
 | milestone | scope | status |
 |---|---|---|
 | M1 | retrieval slice and retrieval eval | built and tested |
-| M1.5 | answer-quality eval, judge validation, Langfuse tracing | built and tested |
+| M1.5 | answer-quality eval, judge validation, Langfuse tracing, then retrieval and prompt fixes | built and tested; fixes partly re-evaluated |
 | M2 | FastAPI gateway (SSE streaming, API-key auth, rate limit, cost per request), MCP server, LangGraph agent with refusal path | planned |
 | M3 | Dockerfiles, GitHub Actions CI with a retrieval-eval gate, AWS deployment | planned |

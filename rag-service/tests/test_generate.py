@@ -81,3 +81,14 @@ def test_without_a_key_generation_is_skipped(monkeypatch):
 
 def test_unknown_model_has_no_cost_rather_than_a_guess():
     assert cost_usd("claude-not-a-real-model", 1000, 1000) is None
+
+
+def test_prompt_labels_regulation_and_commentary_and_prefers_the_regulation():
+    mixed = [
+        HITS[0],
+        Hit(2, "Federal Register", "https://example.test/fr", "81 FR 13040 (STEM OPT final rule), Cap-Gap", "until October 1", 0.8),
+    ]
+    text = generate.format_sources(mixed)
+    assert "[1] REGULATION (current law): 8 CFR 214.2(f)(10) Practical training" in text
+    assert "[2] COMMENTARY (2016 preamble" in text
+    assert "state only what the REGULATION says" in generate.SYSTEM_PROMPT

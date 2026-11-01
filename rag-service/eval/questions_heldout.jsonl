@@ -1,0 +1,11 @@
+{"question": "How long do I have to leave the country after finishing my program and any practical training?", "must_contain": ["additional 30-day period"], "in_regulation": true}
+{"question": "Can the stay of an F-2 spouse last longer than the F-1 student's?", "must_contain": ["may not exceed the authorized period of stay of the principal f-1 student"], "in_regulation": true}
+{"question": "How long can I be abroad and still be readmitted to continue my studies?", "must_contain": ["temporary absence of five months or less"], "in_regulation": true}
+{"question": "What happens if my school enters a program extension in SEVIS after the end date on my I-20 has passed?", "must_contain": ["late requests of extension of current program end date"], "in_regulation": true}
+{"question": "What is the longest admission period for a student in an English language training program?", "must_contain": ["maximum of admission period of 24 months"], "in_regulation": true}
+{"question": "Who decides whether my OPT work permit application is approved?", "must_contain": ["uscis will adjudicate a student"], "in_regulation": true}
+{"question": "How soon after transferring out of my school do I have to begin classes at the new one?", "must_contain": ["within 5 months of transferring out of the current school"], "in_regulation": true}
+{"question": "Who do I have to tell first when I want to transfer to a different school?", "must_contain": ["transfer-out school"], "in_regulation": true}
+{"question": "Do I need an updated I-20 if my major changed before I come back from a trip abroad?", "must_contain": ["updated form i-20"], "in_regulation": true}
+{"question": "What if I return to the US while my OPT work permit application is still pending?", "must_contain": ["recommended employment end date"], "in_regulation": true}
+{"question": "Can the child of an F-1 student study part time?", "must_contain": ["less than a full course of study"], "in_regulation": true}

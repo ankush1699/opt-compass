@@ -7,7 +7,8 @@ Two strictness levels are reported:
   any      - the passage may come from any source (regulation or Federal Register commentary)
   primary  - questions flagged `in_regulation` must be answered by an eCFR chunk, the current law
 
-Usage: python -m eval.run_eval [--validate]   (--validate checks every phrase exists in the corpus)
+Usage: python -m eval.run_eval [--validate] [--heldout]   (--heldout: questions_heldout.jsonl, written after the
+retrieval settings were tuned on questions.jsonl and never used to tune anything)   (--validate checks every phrase exists in the corpus)
 """
 import json
 import sys
@@ -17,12 +18,14 @@ from app.db import connect
 from app.retrieve import search
 
 QUESTIONS = Path(__file__).with_name("questions.jsonl")
+HELDOUT = Path(__file__).with_name("questions_heldout.jsonl")
 KS = (1, 3, 6)
 MODES = ("dense", "keyword", "hybrid", "rerank")
 
 
 def load() -> list[dict]:
-    return [json.loads(line) for line in QUESTIONS.read_text().splitlines() if line.strip()]
+    path = HELDOUT if "--heldout" in sys.argv else QUESTIONS
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
 def validate(conn, questions: list[dict]) -> int:
