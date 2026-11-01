@@ -208,6 +208,10 @@ class GeminiProvider:
 
 
 def make_provider(provider: str, settings: Settings, model: str, effort: str = ""):
+    if not model.strip():
+        # os.getenv's default does not apply to a variable that is set but empty (LLM_MODEL= in .env), and an empty
+        # model name only surfaces later as an opaque 404 from the provider.
+        raise ProviderError("No model is configured: set LLM_MODEL (for example in the repo-root .env).")
     if provider == "anthropic":
         return AnthropicProvider(settings, model, effort)
     if provider == "gemini":

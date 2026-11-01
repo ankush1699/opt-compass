@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.db import connect
 from app.generate import DISCLAIMER, answer
+from app.llm import ProviderError
 from app.retrieve import search
 
 MAX_TOP_K = 15
@@ -158,7 +159,10 @@ def ask(question: str) -> Answered:
     if len(question.strip()) < 3 or len(question) > 500:
         raise ToolError("question must be between 3 and 500 characters")
     hits = search(get_conn(), question.strip(), 6, "rerank")
-    result = answer(question.strip(), hits)
+    try:
+        result = answer(question.strip(), hits)
+    except ProviderError as exc:
+        raise ToolError(f"The model provider failed: {exc}") from exc  # ToolError is the only error type whose text reaches the client
     return Answered(
         answer=result.text,
         mode=result.mode,

@@ -4,6 +4,7 @@ import pytest
 from mcp import Client
 
 from app import mcp_server
+from app.llm import ProviderError
 from app.generate import Answer
 from app.retrieve import Hit
 
@@ -113,6 +114,15 @@ def test_ask_without_a_model_returns_sources_and_no_answer(server, monkeypatch):
     monkeypatch.setattr(mcp_server, "answer", lambda *_a, **_k: Answer(None, "retrieval-only"))
     body = call(server, "ask", {"question": "How many days of unemployment?"}).structured_content
     assert body["answer"] is None and body["mode"] == "retrieval-only" and len(body["sources"]) == 2
+
+
+def test_ask_reports_a_provider_failure_to_the_client(server, monkeypatch):
+    def fail(*_a, **_k):
+        raise ProviderError("No model is configured: set LLM_MODEL")
+
+    monkeypatch.setattr(mcp_server, "answer", fail)
+    result = call(server, "ask", {"question": "How many days of unemployment?"})
+    assert result.is_error and "No model is configured" in result.content[0].text
 
 
 def test_ask_rejects_a_too_short_question(server):

@@ -164,3 +164,12 @@ def test_timeouts_and_dropped_connections_become_provider_errors(monkeypatch):
         provider(hang, monkeypatch).complete("S", "U", 100)
     with pytest.raises(ProviderError, match="ReadTimeout"):
         list(provider(hang, monkeypatch).stream("S", "U", 100))
+
+
+def test_make_provider_refuses_an_empty_model_name():
+    from app.config import load_settings
+    from app.llm import ProviderError, make_provider
+
+    for model in ("", "  "):
+        with pytest.raises(ProviderError, match="LLM_MODEL"):
+            make_provider("gemini", load_settings(), model)
