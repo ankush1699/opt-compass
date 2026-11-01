@@ -174,7 +174,7 @@ Limits, stated plainly: the rate limiter is in memory (one process; counts reset
 Register it (replace the path with your checkout; the server reads the repo-root `.env` for the database and model settings):
 
 ```bash
-claude mcp add --transport stdio --env PYTHONPATH=/ABSOLUTE/PATH/opt-compass/rag-service opt-compass \
+claude mcp add --env PYTHONPATH=/ABSOLUTE/PATH/opt-compass/rag-service --transport stdio opt-compass \
   -- /ABSOLUTE/PATH/opt-compass/rag-service/.venv/bin/python -m app.mcp_server
 ```
 
