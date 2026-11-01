@@ -1,0 +1,151 @@
+{
+  "judge_model": "gemini-3.6-flash",
+  "cases_run": 11,
+  "cases_planned": 11,
+  "wrong_claims": 6,
+  "wrong_caught": 6,
+  "controls": 4,
+  "controls_wrongly_flagged": 0,
+  "miscited": 1,
+  "miscited_caught": 1,
+  "rows": [
+    {
+      "id": "q001",
+      "claim": 1,
+      "kind": "wrong",
+      "text": "During post-completion OPT, students may not accrue an aggregate of more than 60 days of unemployment .",
+      "cited": [
+        1
+      ],
+      "supported_by_cited": false,
+      "supported_by_any": false,
+      "reason": "Passage 1 states that students may not accrue an aggregate of more than 90 days of unemployment during post-completion OPT, not 60 days."
+    },
+    {
+      "id": "q001",
+      "claim": 2,
+      "kind": "control",
+      "text": "If granted a 24-month OPT extension, students may not accrue an aggregate of more than 150 days of unemployment during the total OPT period, which includes the post-completion OPT period and the subsequent 24-month extension period .",
+      "cited": [
+        1
+      ],
+      "supported_by_cited": true,
+      "supported_by_any": true,
+      "reason": "Passage 1 explicitly states that students granted a 24-month OPT extension may not accrue an aggregate of more than 150 days of unemployment during the total OPT period, including the post-completion OPT period and the subsequent 24-month extension period."
+    },
+    {
+      "id": "q003",
+      "claim": 1,
+      "kind": "wrong",
+      "text": "You may properly file your Form I-765 for post-completion OPT up to 30 days prior to your program end date .",
+      "cited": [
+        1
+      ],
+      "supported_by_cited": false,
+      "supported_by_any": false,
+      "reason": "Passage [1] states that a student may file Form I-765 up to 90 days prior to their program end date, not 30 days."
+    },
+    {
+      "id": "q005",
+      "claim": 1,
+      "kind": "wrong",
+      "text": "No, a student does not need a recommendation from their DSO in order to apply for OPT .",
+      "cited": [
+        1,
+        2
+      ],
+      "supported_by_cited": false,
+      "supported_by_any": false,
+      "reason": "Passage [1] explicitly states that a student must have a recommendation from their DSO in order to apply for OPT."
+    },
+    {
+      "id": "q005",
+      "claim": 2,
+      "kind": "control",
+      "text": "The student must initiate the process by requesting this recommendation from their DSO, and the DSO must update the student's SEVIS record with the recommendation before the student can apply to USCIS for employment authorization .",
+      "cited": [
+        2,
+        4
+      ],
+      "supported_by_cited": true,
+      "supported_by_any": true,
+      "reason": "Passage 2 explicitly states that a student must initiate the process by requesting a recommendation from their DSO, and Passage 4 explicitly requires the DSO to update the student's SEVIS record with the recommendation before the student can apply to USCIS for employment authorization."
+    },
+    {
+      "id": "q012",
+      "claim": 1,
+      "kind": "wrong",
+      "text": "Students on STEM OPT extensions are required to report to their DSOs every twelve months to confirm the validity of their SEVIS information .",
+      "cited": [
+        1,
+        2
+      ],
+      "supported_by_cited": false,
+      "supported_by_any": false,
+      "reason": "Passages 1 and 2 state that validation reporting to confirm SEVIS information must occur every six months, not every twelve months."
+    },
+    {
+      "id": "q016",
+      "claim": 1,
+      "kind": "wrong",
+      "text": "Yes, an employer may replace U.S. workers with STEM OPT students once more than 120 days have passed .",
+      "cited": [
+        1,
+        3
+      ],
+      "supported_by_cited": false,
+      "supported_by_any": false,
+      "reason": "Passage [2] explicitly states that an employer cannot replace a U.S. worker with a STEM OPT student regardless of the timeline, and the cited passages [1] and [3] do not support this statement."
+    },
+    {
+      "id": "q016",
+      "claim": 2,
+      "kind": "control",
+      "text": "Under the final rule, an employer cannot replace a U.S. worker with a STEM OPT student, regardless of the timeline .",
+      "cited": [
+        2
+      ],
+      "supported_by_cited": true,
+      "supported_by_any": true,
+      "reason": "Passage 2 explicitly states that under the final rule, an employer cannot replace a U.S. worker with a STEM OPT student, regardless of the timeline."
+    },
+    {
+      "id": "q018",
+      "claim": 1,
+      "kind": "control",
+      "text": "The STEM Designated Degree Program List (\"STEM list\") determines whether your degree is a qualifying STEM field .",
+      "cited": [
+        1,
+        2
+      ],
+      "supported_by_cited": true,
+      "supported_by_any": true,
+      "reason": "Passages 1 and 2 state that the STEM Designated Degree Program List is the complete list of qualifying degree categories determined to fall within the regulatory definition of a STEM field."
+    },
+    {
+      "id": "q018",
+      "claim": 2,
+      "kind": "wrong",
+      "text": "This list is maintained by USCIS and published at uscis.gov/stem-list .",
+      "cited": [
+        1,
+        2
+      ],
+      "supported_by_cited": false,
+      "supported_by_any": false,
+      "reason": "Passage 1 states that the STEM Designated Degree Program List is published on the SEVP website at http://www.ice.gov/sevis, while Passage 2 states that DHS maintains the list, contradicting the claim's mention of USCIS and uscis.gov/stem-list."
+    },
+    {
+      "id": "q007",
+      "claim": 1,
+      "kind": "miscited",
+      "text": "While school is in session, a student may work up to 20 hours per week pursuant to OPT .",
+      "cited": [
+        4
+      ],
+      "supported_by_cited": false,
+      "supported_by_any": true,
+      "reason": "The statement is directly supported by passage [2], but passage [4], which is cited, discusses a minimum requirement of 20 hours per week for STEM OPT extensions rather than a maximum of 20 hours while school is in session."
+    }
+  ]
+}

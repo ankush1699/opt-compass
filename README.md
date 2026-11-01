@@ -16,7 +16,7 @@ the current text of **8 CFR 214.2(f)** (eCFR API) and the **STEM OPT final rule,
 | `POST /ask` with cited answers | built and tested |
 | Answer-quality eval (faithfulness, citation accuracy, abstention) | built and tested; one live run, results below |
 | Judge validation by hand-labelling | built and tested; 18 claims labelled, results below |
-| Judge sensitivity probe (`eval/judge_probe.py`) | built, not evaluated: the live run hit the free-tier daily limit and has not been completed |
+| Judge sensitivity probe (`eval/judge_probe.py`) | built and tested; one live run on 11 cases, results below |
 | Langfuse tracing (self-hosted) | built and tested for retrieval and rerank spans; generation token and cost recording verified only against a fake model reply, not a live traced run |
 | FastAPI gateway, MCP server, LangGraph agent | planned (M2) |
 | Dockerfiles, CI, AWS deployment | planned (M3) |
@@ -82,11 +82,21 @@ The quality gate (`faithfulness >= 0.90`, `citation precision >= 0.85`, `abstain
 | check | result |
 |---|---|
 | 18 claims from 12 answers labelled by hand | `supported_by_any`: raw agreement 0.94, Cohen's kappa 0.0; `supported_by_cited`: raw agreement 0.94, kappa 0.77 |
-| judge sensitivity probe (known-wrong claims) | **not completed**, see below |
+| judge sensitivity probe, 11 cases (run 2026-11-01) | caught 6 of 6 corrupted claims, 0 of 4 untouched controls wrongly flagged, caught 1 of 1 wrong citation |
 
 Read this table carefully. The judge marked all 45 claims as supported, so on that axis there is nothing for kappa to measure: kappa 0.0 does not mean "random", it means the judge never varied, and 0.94 agreement is simply 17 of 18 labels matching. The one disagreement (q025, claim 2) is a case the judge missed, and it is the only evidence in this repo that the judge can be too lenient. The labeller was Claude, not a human, and had seen the judge's overall result before labelling, so the labels are neither blind nor independent of model family. The labels are in `rag-service/eval/manual/labels.jsonl` and anyone can re-check them with `python -m eval.answer_eval sample <run>` and `agreement <run> <labels>`.
 
-`eval/judge_probe.py` corrupts real claims (wrong number, flipped answer, invented source, wrong citation) and checks whether the real judge flags them, with untouched claims as controls. Its logic is unit-tested against a lenient and a strict fake judge. The live run stopped after the free tier's daily request limit was reached, so there is **no recorded sensitivity number yet**.
+`eval/judge_probe.py` corrupts real claims (wrong number, flipped answer, invented source, wrong citation) and checks whether the real judge flags them, with untouched claims as controls. Its logic is unit-tested against a lenient and a strict fake judge. Live run, 2026-11-01, judge `gemini-3.6-flash`, against the 36-row run above:
+
+```bash
+cd rag-service
+JUDGE_MODEL=gemini-3.6-flash .venv/bin/python -m eval.judge_probe \
+  eval/results/gemini-3.5-flash-lite__judge-gemini-3.6-flash.jsonl --out eval/results/judge_probe.json
+```
+
+It flagged all 6 corrupted claims (60 days for 90, 30 days for 90, "no recommendation needed", twelve months for six, "replace workers after 120 days", an invented USCIS URL), flagged none of the 4 controls, and caught the 1 claim given a wrong citation. Per-case verdicts and the judge's reasons are in `rag-service/eval/results/judge_probe.json`.
+
+This is a floor on what the judge can do, not a rate: 11 cases, written by hand, and each corruption is blatant (a changed number, a flipped yes/no, an invented source). It says nothing about subtle errors like the q025 case above, which the judge did accept. It also shows the judge can say "unsupported", so the 45 of 45 result is not an artefact of a judge that always says yes.
 
 ## Known failures
 
@@ -137,6 +147,6 @@ Configuration is environment variables; see `.env.example`. Never commit `.env`.
 | milestone | scope | status |
 |---|---|---|
 | M1 | retrieval slice and retrieval eval | built and tested |
-| M1.5 | answer-quality eval, judge validation, Langfuse tracing | built and tested, judge sensitivity probe pending |
+| M1.5 | answer-quality eval, judge validation, Langfuse tracing | built and tested |
 | M2 | FastAPI gateway (SSE streaming, API-key auth, rate limit, cost per request), MCP server, LangGraph agent with refusal path | planned |
 | M3 | Dockerfiles, GitHub Actions CI with a retrieval-eval gate, AWS deployment | planned |
